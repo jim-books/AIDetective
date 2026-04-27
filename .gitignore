@@ -1,1 +1,38 @@
 .DS_Store
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Node / JS caches
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Environment files
+.env
+.env.*
+
+# Build / coverage output
+dist/
+build/
+coverage/
