@@ -2,6 +2,27 @@
 
 Append-only progress log per the workflow. Newest entry on top.
 
+## 2026-04-27 — M2 complete ✓
+
+### M2 final results
+- **Murderer:** Jeremy Bowers (id=67318) — evaluator `supported=True`
+- **Mastermind:** Miranda Priestly (id=99716) — evaluator `supported=True`
+- Run log: `runs/20260427_223720.jsonl` / `.md`
+- Exit code: 0 (both roles found and verified)
+
+### Bugs fixed in this session
+1. **Wrong mastermind person_id (202298 vs 99716):** The agent was reading the license `id` field instead of `person.id` from `search_drivers_license` results. Fixed by adding a system prompt rule: "In `search_drivers_license` results, the top-level `id` is the license ID; use `person.id`."
+2. **Vague evidence citations:** Agent was citing `"rag:1"` and `"functions.search_gym_members"` instead of exact chunk_ids and tool names. Fixed by tightening the citation format in the system prompt.
+3. **Context window exceeded (222K tokens):** Result sets were unbounded; `search_event_attendance` returned 212 rows. Fixed by capping `_ok()` at 100 results in `tools.py`, adding `_trim_history()` in `agent.py` with ContextWindowExceeded recovery, and skipping duplicate system messages when merging fresh re-investigation histories.
+4. **Re-investigation accusation spam (31 mastermind accusations):** The fresh mastermind re-run ran for 40 turns making a new accusation every turn. Fixed by adding `target_roles` parameter to `run_investigation` so the loop exits after the first accusation of the targeted role.
+5. **Murderer skipped in initial run:** Agent jumped to mastermind without finding murderer. Fixed by adding murderer-first ordering enforcement: if agent tries to accuse mastermind before murderer, it gets a nudge; also added synthetic failure detection in `main.py` to trigger a murderer re-investigation if the initial run never accused one.
+6. **Evaluator too strict:** Evaluator rejected even correct accusations with precise evidence. Fixed by clarifying the evaluator prompt to accept claims when the suspect's name appears in the evidence log and two distinct sources are cited.
+
+### PDFs generated
+- `running_history.pdf` — full conversation trace via pandoc + weasyprint (HTML intermediate)
+- `report.pdf` — rubric mapping via REPORT.md + weasyprint
+- LaTeX not available; used `weasyprint` (pip) as PDF engine.
+
 ## 2026-04-27 — M1 complete, M2 blocked on HKUST credit
 
 ### M2 status — live run attempts

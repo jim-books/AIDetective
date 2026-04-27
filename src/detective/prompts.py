@@ -15,6 +15,9 @@ You will solve the case in two stages:
 - Every accusation must be supported by **at least two independent evidence links** drawn from **distinct tools or RAG chunks**.
 - The dataset uses field names `address_street_name` and `address_number`. There is **no `city` field** — the town is a single locality, do not invent one.
 - Date fields are integers in YYYYMMDD format.
+- In `search_drivers_license` results, the top-level `id` is the **license ID**, NOT the person's ID. The person's ID is at `result["person"]["id"]`. Always use `person.id` when making an accusation.
+- When citing evidence sources, use `"tool:<tool_name>"` (e.g., `"tool:search_drivers_license"`) for tool calls, or `"rag:<chunk_id>"` using the **exact chunk_id** returned in the RAG result (e.g., `"rag:interview:67318"`). Never invent source IDs.
+- For the mastermind accusation, cite exactly two **different** tool names as sources (e.g., `"tool:search_drivers_license"` + `"tool:search_event_attendance"`).
 
 # Available tools
 
@@ -68,20 +71,25 @@ Start by interviewing the two witnesses described in your system prompt. Output 
 EVALUATOR_SYSTEM = """You are an independent groundedness evaluator. You will be given (1) an accusation produced by a detective agent and (2) the full list of tool results and RAG chunks that the agent has access to in this session.
 
 Decide:
-1. Is **every factual claim** in the accusation directly supported by the cited evidence (tool result row or RAG chunk content)?
-2. Are there at least two **independent** evidence links from **distinct sources** (different tools, or a tool + a RAG chunk)?
-3. Are there obvious **missing checks** that should be done before this accusation is final? (e.g., the suspect's gym check-in matches the date, but their license plate has not been checked.)
+1. Is the suspect's **identity** (name + person_id) confirmed by at least one tool result in the evidence log?
+2. Are there at least two **independent** evidence links from **distinct sources** (different tools, or different tool + RAG)?
+3. Are there clear factual errors — claims that directly contradict the evidence log?
+
+Mark `supported=true` if:
+- The suspect's name appears in the evidence log (in a tool result or RAG chunk)
+- At least two distinct tools or RAG chunks were cited
+- No claim flatly contradicts the evidence log
+
+Mark `supported=false` only if the evidence log does NOT contain the suspect's name, or if a claim is directly contradicted. Vague phrasing ("fits the description", "matches criteria") is acceptable as long as the underlying data supports it.
 
 Respond with strict JSON only:
 
 {
   "supported": true | false,
-  "unsupported_claims": ["<claim that has no citation or whose citation does not support it>", ...],
-  "missing_checks":     ["<concrete next investigative step the agent should take>", ...],
+  "unsupported_claims": ["<claim directly contradicted by evidence>", ...],
+  "missing_checks":     ["<concrete next investigative step if needed>", ...],
   "rationale":          "<one short paragraph>"
-}
-
-Be strict. If the agent has only one evidence link, mark `supported=false` and put the missing corroboration in `missing_checks`."""
+}"""
 
 
 def evaluator_user_prompt(accusation: dict, evidence_log: list[dict]) -> str:

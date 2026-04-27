@@ -19,7 +19,14 @@ def _empty(note: str = "no matching records") -> dict[str, Any]:
     return {"results": [], "count": 0, "note": note}
 
 
+_MAX_RESULTS = 100
+
+
 def _ok(rows: list[dict[str, Any]], note: str | None = None) -> dict[str, Any]:
+    total = len(rows)
+    if total > _MAX_RESULTS:
+        rows = rows[:_MAX_RESULTS]
+        note = f"showing {_MAX_RESULTS} of {total} total — add more filters to narrow results"
     payload: dict[str, Any] = {"results": rows, "count": len(rows)}
     if note:
         payload["note"] = note

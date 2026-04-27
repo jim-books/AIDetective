@@ -125,6 +125,16 @@ def _parse_cot(content: str | None) -> dict | None:
             return None
 
 
+def _trim_history(history: list[TurnRecord], keep_turns: int = 20) -> list[TurnRecord]:
+    """Keep system + first user messages, then the most recent `keep_turns` assistant-led exchanges."""
+    prefix = history[:2]  # system + initial user
+    assistant_indices = [i for i, t in enumerate(history) if t.role == "assistant"]
+    if len(assistant_indices) <= keep_turns:
+        return history
+    cut = assistant_indices[-keep_turns]
+    return prefix + history[cut:]
+
+
 def run_investigation(
     *,
     client: Any,
@@ -135,13 +145,13 @@ def run_investigation(
     max_turns: int = MAX_TURNS,
     state: AgentState | None = None,
     extra_user_messages: list[str] | None = None,
+    target_roles: set[str] | None = None,
 ) -> AgentState:
     """Drive the agent loop. Returns the final AgentState (history + accusations).
 
     The loop terminates when the model emits a CoT JSON whose
     `next_step_or_conclusion.type == "accuse"` AND we have collected
-    accusations for both `murderer` and `mastermind`, or when `max_turns`
-    is exceeded.
+    accusations for all roles in `target_roles`, or when `max_turns` is exceeded.
     """
     state = state or AgentState()
 
@@ -153,19 +163,31 @@ def run_investigation(
         for m in extra_user_messages:
             state.append(TurnRecord(role="user", content=m))
 
-    needed_roles = {"murderer", "mastermind"}
+    needed_roles: set[str] = set(target_roles) if target_roles is not None else {"murderer", "mastermind"}
     found_roles: set[str] = {a.role for a in state.accusations}
 
     for _ in range(max_turns):
         if found_roles >= needed_roles:
             break
 
-        resp = client.chat.completions.create(
-            model=model,
-            messages=state.messages(),
-            tools=ALL_TOOL_SCHEMAS,
-            tool_choice="auto",
-        )
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=state.messages(),
+                tools=ALL_TOOL_SCHEMAS,
+                tool_choice="auto",
+            )
+        except Exception as exc:
+            if "ContextWindowExceeded" in str(exc) or "context_length_exceeded" in str(exc):
+                state.history = _trim_history(state.history)
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=state.messages(),
+                    tools=ALL_TOOL_SCHEMAS,
+                    tool_choice="auto",
+                )
+            else:
+                raise
         msg = resp.choices[0].message
         content = msg.content
         tool_calls = getattr(msg, "tool_calls", None) or []
@@ -215,8 +237,20 @@ def run_investigation(
         if cot and isinstance(cot.get("next_step_or_conclusion"), dict):
             nxt = cot["next_step_or_conclusion"]
             if nxt.get("type") == "accuse":
+                role = nxt.get("role", "unknown")
+                # Enforce murderer-first when both roles are targeted.
+                if (
+                    role == "mastermind"
+                    and "murderer" in needed_roles
+                    and "murderer" not in found_roles
+                ):
+                    state.append(TurnRecord(
+                        role="user",
+                        content="You must accuse the murderer before the mastermind. Find and accuse the murderer first.",
+                    ))
+                    continue
                 acc = Accusation(
-                    role=nxt.get("role", "unknown"),
+                    role=role,
                     person_id=int(nxt.get("person_id", -1)),
                     name=str(nxt.get("name", "")),
                     evidence=list(nxt.get("evidence", [])),

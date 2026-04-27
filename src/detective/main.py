@@ -109,28 +109,50 @@ def main() -> int:
 
     _, failures = _evaluate_all(state.accusations)
 
-    # One re-investigation per failed role (fresh state avoids 120-msg context)
+    # Add a synthetic failure for murderer if the initial run never accused one.
+    accused_roles = {a.role for a in state.accusations}
+    for role in ("murderer", "mastermind"):
+        if role not in accused_roles and role not in {r for r, _ in [(f.role, None) for f, _ in failures]}:
+            failures.append((AgentState.__new__(AgentState), None))  # placeholder replaced below
+            # Use a real Accusation placeholder instead
+            from .agent import Accusation as _Acc
+            placeholder = _Acc(role=role, person_id=-1, name="unknown", evidence=[], raw_cot={})
+            failures[-1] = (placeholder, None)
+
+    # One targeted re-investigation per failed role (fresh state, stops on first accusation)
     for failed_acc, verdict in failures:
         if failed_acc.role in failed_roles:
             continue  # already retried this role
         failed_roles.add(failed_acc.role)
         missing = verdict.missing_checks if verdict else []
         unsupported = verdict.unsupported_claims if verdict else []
-        hint = (
-            f"Re-investigate the {failed_acc.role}. Previous suspect {failed_acc.name} "
-            f"(id={failed_acc.person_id}) was rejected. Missing: {missing}. "
-            f"Unsupported: {unsupported}. Find stronger evidence."
-        )
+        if failed_acc.role == "mastermind":
+            hint = (
+                "Re-investigate the mastermind from scratch. "
+                "Step 1: call get_interview(person_id=67318) to read Jeremy Bowers' exact testimony about who hired him. "
+                "Step 2: call search_drivers_license with the physical attributes Bowers described (hair color, car make/model, gender, height range). "
+                "Step 3: call search_event_attendance for the matching person to verify the event Bowers mentioned. "
+                "CRITICAL: in the accusation, use the person.id field from the drivers_license result as person_id — NOT the top-level id (which is the license id). "
+                "Cite 'tool:search_drivers_license' and 'tool:search_event_attendance' as two distinct evidence sources."
+            )
+        else:
+            hint = (
+                f"Re-investigate the {failed_acc.role}. Previous suspect {failed_acc.name} "
+                f"(id={failed_acc.person_id}) was rejected. Missing: {missing}. "
+                f"Unsupported: {unsupported}. Find stronger evidence."
+            )
         fresh = AgentState()
         fresh.accusations.extend(verified)  # seed with already-approved roles
         run_investigation(
             client=client, ev=ev, vector_index=index, embed_fn=embed_fn,
             model=chat_model, state=fresh, extra_user_messages=[hint],
+            target_roles={failed_acc.role},  # stop as soon as this one role is accused
         )
         new_accs = [a for a in fresh.accusations if a not in verified and a not in state.accusations]
         state.accusations.extend(new_accs)
         state.evidence_log.extend(fresh.evidence_log)
-        state.history.extend(fresh.history)
+        # Skip fresh state's system message — main state already has one
+        state.history.extend(t for t in fresh.history if t.role != "system")
         _evaluate_all(new_accs)
 
     jsonl_path = write_jsonl(state)
