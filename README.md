@@ -1,7 +1,7 @@
 # 🕵️ Detective Agent System
 
 Grounded LLM detective for HKUST AI for Design Assignment 5.  
-The agent uses tool calling + RAG over interview transcripts to identify both the **murderer** and the **mastermind**.
+The project includes both a **single-agent pipeline** (R1-R7) and an **optional multi-agent pipeline** (M3 bonus: design + implementation), with tool calling + RAG over interviews to identify both the **murderer** and the **mastermind**.
 
 ## ✨ Features
 
@@ -10,12 +10,20 @@ The agent uses tool calling + RAG over interview transcripts to identify both th
 - RAG retrieval over interview transcripts (`text-embedding-3-small`)
 - Evaluator pass to verify accusation support before final output
 - Run logging to JSONL and Markdown in `runs/`
+- Optional multi-agent architecture: `ManagerAgent`, `RecordsAgent`, `TranscriptAgent`, `CriticAgent`
 
 ## 📂 Project Structure
 
-- `src/detective/` — core agent, tools, RAG, evaluator, logger
+- `src/detective/agent.py` — single-agent CoT loop and tool execution
+- `src/detective/multi_agent.py` — multi-agent orchestration and specialist loops
+- `src/detective/main.py` — single-agent entry point
+- `src/detective/multi_main.py` — multi-agent entry point
+- `src/detective/tools.py` — tool implementations + schemas
+- `src/detective/rag.py` — embedding index + retrieval
+- `src/detective/evaluator.py` — independent groundedness checks
+- `src/detective/logger.py` — JSONL/Markdown run export
 - `Evidence/` — JSON evidence tables
-- `tests/` — unit tests (including RAG tests)
+- `tests/` — offline/unit tests (single-agent, RAG, tools, multi-agent)
 - `.env.example` — environment variable template
 
 ## ⚙️ Setup
@@ -34,8 +42,16 @@ Set one provider in `.env`:
 
 ## 🚀 Run
 
+Single-agent mode:
+
 ```bash
 python -m detective.main
+```
+
+Multi-agent mode (optional M3):
+
+```bash
+python -m detective.multi_main
 ```
 
 Expected final roles:
@@ -52,6 +68,15 @@ Expected final roles:
 - **R6 Evaluation**: independent accusation validation in `src/detective/evaluator.py`
 - **R7 Logging**: full trace export to JSONL/Markdown in `src/detective/logger.py`
 
+## ⭐ Optional Bonus (M3)
+
+- **Design**: orchestrator-as-caller multi-agent system
+- **Implementation**: `ManagerAgent` delegates via tools to:
+  - `RecordsAgent` (structured records tools)
+  - `TranscriptAgent` (interview + `rag_search`)
+  - `CriticAgent` (accusation validation wrapper around evaluator)
+- **Safety rule**: accusations are committed only after critic validation returns `supported=true`
+
 ## 🔎 Evidence Chain (Short)
 
 - **Murderer path**: witness clues (`Northwestern Dr`, `Annabel`) -> gym prefix `48Z` + gold + Jan 9 check-in -> plate fragment `H42W` -> `Jeremy Bowers`
@@ -59,13 +84,20 @@ Expected final roles:
 
 ## 📄 Full Report
 
-Detailed write-up is in `REPORT.md` (prompt design, tooling, RAG, evaluation, and complete evidence justification).
+Detailed write-up is in `REPORT.md` (R1-R7 mapping, M3 design/implementation, and complete evidence justification).
 
 ## 🧪 Test
 
 ```bash
 pytest
 ```
+
+Current status (from latest changelog): all tests passing, including new offline multi-agent tests.
+
+## 📦 Output Artifacts
+
+- Run traces: `runs/<timestamp>.jsonl` and `runs/<timestamp>.md`
+- PDF deliverables can be generated from markdown exports (e.g., running history + report)
 
 ## 📝 Deliverables
 

@@ -104,6 +104,38 @@ If the evaluator rejects an accusation, a targeted re-investigation runs with a 
 
 ---
 
+---
+
+## M3 — Multi-Agent System (Optional)
+
+**Files:** `src/detective/multi_agent.py`, `src/detective/multi_main.py`, `src/detective/prompts.py`
+
+### Design
+
+The multi-agent system replaces the single monolithic agent with four collaborating agents:
+
+| Agent | Role | Tools |
+|-------|------|-------|
+| **ManagerAgent** | Orchestrator — delegates queries, collects findings, validates accusations | 3 delegation tools |
+| **RecordsAgent** | Structured DB specialist | `lookup_person`, `search_gym_members`, `search_drivers_license`, `search_event_attendance`, `lookup_income` |
+| **TranscriptAgent** | Interview / RAG specialist | `get_interview`, `rag_search` |
+| **CriticAgent** | Groundedness validator | wraps `evaluate_accusation()` |
+
+**Orchestrator-as-caller pattern**: The Manager's LLM sees only three tools — `delegate_to_records(task)`, `delegate_to_transcripts(task)`, and `validate_accusation(role, person_id, name, evidence)`. When it calls a delegation tool, Python synchronously creates the specialist, runs its mini CoT loop (max 5 turns) with its restricted tool subset, and returns the findings string as the tool result. The Manager's `evidence_log` accumulates every specialist tool result so the Critic sees a unified log.
+
+**Accusation integrity**: `state.accusations.append` in `ManagerAgent.run()` happens *only* inside the `validate_accusation` handler when `CriticAgent.validate()` returns `supported=True`. A CoT `"type":"accuse"` output from the Manager's LLM is treated as the call arguments for `validate_accusation`, not as a direct commit — this prevents ungrounded final accusations.
+
+### Implementation
+
+- `MANAGER_TOOL_SCHEMAS` — 3-element list with full JSON Schema definitions for the delegation tools
+- `SpecialistResult` — `(findings: str, evidence_log: list[dict], raw_history: list[TurnRecord])` — findings returned to Manager; evidence_log merged into Manager state; raw_history kept for logging but not fed to Manager's context window
+- `_run_specialist_loop()` — shared private helper used by both `RecordsAgent.run()` and `TranscriptAgent.run()`; imports `_execute_tool`, `_parse_cot` from `agent.py` to avoid duplication
+- `RecordsAgent.TOOL_SCHEMAS` / `TranscriptAgent.TOOL_SCHEMAS` — class-level attributes filtered from the existing `TOOL_SCHEMAS` in `tools.py`; tool restriction verified by tests without any LLM call
+
+Entry point: `python -m detective.multi_main` (also registered as `detective-multi` CLI).
+
+---
+
 ## Evidence Chain Summary
 
 ### Murderer: Jeremy Bowers (id=67318)

@@ -22,6 +22,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[project.scripts]
+detective = "detective.main:main"
+detective-multi = "detective.multi_main:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

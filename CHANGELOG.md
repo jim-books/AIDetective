@@ -2,6 +2,41 @@
 
 Append-only progress log per the workflow. Newest entry on top.
 
+## 2026-04-28 — M3 complete ✓
+
+### M3 live run results
+- **Murderer:** Jeremy Bowers (id=67318) ✓
+- **Mastermind:** Miranda Priestly (id=99716) ✓
+- Run log: `runs/20260428_013909.jsonl` / `.md`
+- Exit code: 0 (both roles found via multi-agent delegation)
+- PDFs: `multi_agent_history.pdf` (80KB), `report.pdf` (47KB, updated with M3 section)
+
+### Bugs fixed during M3 execution
+1. **Specialist hallucinating without tool calls:** `_run_specialist_loop` had a fallback exit that returned immediately when the LLM produced content without tool calls — even on turn 1 before any data was fetched. Fixed by requiring at least one tool call in `state.evidence_log` before allowing the fallback exit; if no evidence yet, a nudge message forces the LLM to issue a tool call.
+2. **Manager not including person_id in transcript tasks:** Manager delegated "Interview Annabel Miller" without a person_id, so TranscriptAgent couldn't call `get_interview`. Fixed by adding delegation tips to `MANAGER_SYSTEM` explicitly requiring person_ids in transcript task strings.
+
+### M3 multi-agent system
+
+Added the optional multi-agent extension (4 bonus points: design + implementation).
+
+**Architecture** — Orchestrator-as-caller pattern with 4 agents:
+- `ManagerAgent` — orchestrates via 3 delegation tools; accusations committed only after `CriticAgent` validates
+- `RecordsAgent` — structured DB specialist (5 tools: lookup_person, search_gym_members, search_drivers_license, search_event_attendance, lookup_income)
+- `TranscriptAgent` — interview/RAG specialist (2 tools: get_interview, rag_search)
+- `CriticAgent` — thin wrapper around existing `evaluate_accusation()`; no LLM loop of its own
+
+**New files:**
+- `src/detective/multi_agent.py` — all 4 agent classes + `SpecialistResult` + `_run_specialist_loop` + `MANAGER_TOOL_SCHEMAS`
+- `src/detective/multi_main.py` — entry point (`python -m detective.multi_main`)
+- `tests/test_multi_agent_offline.py` — 6 offline tests using FakeClient
+
+**Modified files:**
+- `src/detective/prompts.py` — added `RECORDS_SYSTEM`, `TRANSCRIPTS_SYSTEM`, `MANAGER_SYSTEM`
+- `pyproject.toml` — added `detective-multi` CLI entry point
+- `REPORT.md` — added M3 section
+
+**Test results:** 30/30 pass (24 existing + 6 new M3 tests)
+
 ## 2026-04-27 — M2 complete ✓
 
 ### M2 final results
